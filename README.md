@@ -1,36 +1,51 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Project Command Centre
 
-## Getting Started
+A local dashboard over the code projects in `C:\Projects`, with Claude Code built in: see what each repo does and how far along it is, chat with Claude about the code, and have Claude Code implement features on their own branches while you watch.
 
-First, run the development server:
+Next.js 16 (App Router) · TypeScript · Tailwind 4 · SQLite (better-sqlite3 + Drizzle) · React Flow · Claude Code CLI.
+
+## Setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev       # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Needs `git` and the [Claude Code CLI](https://code.claude.com) (`claude`) on your PATH, logged in. All AI features run through Claude Code, so they use your Claude Code login; no API key is needed.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Optional settings in `.env.local`:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Variable | Default | Purpose |
+|---|---|---|
+| `CC_PROJECTS_ROOT` | parent folder of this app | Folder whose git repos are tracked |
+| `CLAUDE_BIN` | `claude` | Path to the Claude Code CLI |
+| `CC_USE_API_KEY` | off | Set to `1` to let child sessions use `ANTHROPIC_API_KEY` instead of your Claude Code login |
 
-## Learn More
+## What it does
 
-To learn more about Next.js, take a look at the following resources:
+| View | |
+|---|---|
+| **Dashboard** `/` | Every git repo under the projects folder (auto-discovered; **Sync repos** to refresh): status, health, feature progress, last commit, branch, uncommitted changes, unmerged agent branches, detected stack. Drag to reorder; filter by status or tech. |
+| **Project** `/projects/:id` | Description, next action, **feature map**, git history, connections, notes. Right side: **Chat** and **Claude Code runs**. |
+| **Graph** `/graph` | Every project as a card with its feature map. Solid arrows are connections you draw; dashed arrows are detected (one repo mentions another). |
+| **Activity** `/activity` | 12-week commit heatmap per repo with Claude runs marked, plus a feed of recent commits and runs. |
+| **Ctrl/Cmd+K** | Jump to a project, or ask Claude a question across all projects. |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Feature map
+**Scan repo with Claude** runs a read-only Claude Code session that reads the README, docs, routes, components and git log, then drafts features as *built*, *in progress* or *planned*. Rescans keep your manual features and anything Claude is working on. You can edit, add or delete features by hand.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Implement
+**Implement** on a feature, or **New task**, starts a Claude Code run:
+- It runs in a **separate git worktree** (`data/worktrees/…`) on a new `agent/<task>-<id>` branch, so your checkout and uncommitted work are never touched. `node_modules` is linked from the main checkout, and `/node_modules` is added to the repo's `.git/info/exclude` so the link is never committed.
+- Permissions: Claude may edit files and run `npm`, `npx`, `node`, `git` and basic read commands. It can't push, merge, rebase, change remotes or run anything else; any other action is denied automatically.
+- Progress streams into the **Runs** tab (messages, files touched, commands, errors). Claude commits its work on the branch; anything left uncommitted is committed for it.
+- The feature moves to **Review**. Use **View diff**, **Open worktree**, then merge it yourself (**Copy merge command**). Once the branch is merged into your checkout, the feature becomes **Built** automatically. **Discard** deletes the branch and worktree.
 
-## Deploy on Vercel
+### Chat
+A read-only Claude Code session in the repo (it can read files and git history), resumed across messages. **Update from chat** proposes status, next-action and feature changes for you to approve. Under any reply: **Save as note** or **Add as features**.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Cost for every chat, scan and run (as reported by Claude Code) is added to the project's usage counter.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Data
+
+SQLite at `data/cc.db`, plus agent worktrees in `data/worktrees/` (all git-ignored). Tables: `projects`, `features`, `runs`, `run_events`, `messages`, `notes`, `links`. Migrations in `drizzle/` run automatically on startup; after editing `src/db/schema.ts`, run `npm run db:generate`.
